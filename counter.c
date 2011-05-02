@@ -10,9 +10,9 @@ static int nthreads = 0;
 static int *ninstructions = NULL;
 static struct instruction **instructions = NULL;
 
-static int *taskid = NULL;
+static int *taskid = NULL;						// used for passing args into threads 
+static pthread_t *counter_thread = NULL;		// thread declaration
 
-pthread_mutex_t flock; // DELETE LATER
 /* ============================================================================
  * Operations
  * ========================================================================== */
@@ -28,7 +28,7 @@ increment(long long *n) {
 
 static void
 mult2(long long *n) {
-	*n = *n+*n;
+	(*n) *= 2;
 }
 
 
@@ -117,7 +117,10 @@ void print_out_2darray(void) {
 	int i, j;
 	for (i = 0; i < nthreads; ++i) {
 		for (j = 0; j < ninstructions[i]; ++j) {
-			printf("incrementer for instruction %i %i is %i\n", i, j, instructions[i][j].repetitions);
+			printf("struct counter %i\n int repetitions %d\n", (int)instructions[i][j].counter->counter, instructions[i][j].repetitions);
+			printf("trying lock\n");
+			pthread_mutex_lock(&instructions[i][j].counter->lock); 
+			pthread_mutex_unlock(&instructions[i][j].counter->lock); 
 		}
 	}
 }
@@ -146,11 +149,36 @@ int free_memory(void) {
 	/* free the counter array */
 	free(counters);
 
+	/* free thread arguments */
 	free(taskid);
+	
+	/* free threads */
+	free(counter_thread);
+	
+	/* set arrays to NULL */
+	counter_thread = NULL;
+	counters = NULL;
+	ninstructions = NULL;
+	instructions = NULL;
 
 	return 1;
 }
 
+void error(void) {
+	printf("error\n");
+	/* free memory from global allocations */
+	if (!free_memory()) {
+		printf("problem freeing memory\n");
+	}	
+	// exit program
+	exit(0);
+}
+
+
+struct thread_data {
+	int thread_id;
+	int num_instructions;
+};
 
 /* ============================================================================
  * Thread function
@@ -158,32 +186,37 @@ int free_memory(void) {
 static void *
 worker_thread(void *arg) {
 	
-	//struct instruction *thread_data;
+	/*struct thread_data *thread_data;
+	thread_data->thread_id = *(int *)arg;
+	thread_data->num_instructions = &ninstructions[thread_data->thread_id];*/
+	
 	long i = 0, 
 		 j = 0;
 	long id =  *(int *) arg;
-	int * thread_ninstructions = &ninstructions[id];
-	printf("a) id is %d\n", *(int *)arg);
+	int *thread_ninstructions = &ninstructions[id];
+	//printf("a) id is %d\n", *(int *)arg);
 	//printf("going into for loop with j and thread_ninstruc: %d %d\n", j, *thread_ninstructions);	
 	
 	/* work through all instructions for that thread */
 	for (j = 0; j < *thread_ninstructions; ++j) {
+		
+		int *thread_repetitions = &instructions[id][j].repetitions;
 
-		pthread_mutex_lock(&instructions[id][j].counter->lock); 
-		int thread_repetitions = instructions[id][j].repetitions;
+		pthread_mutex_lock(&instructions[id][j].counter->lock); 		
 		/* for each repetition call the function */
-		for (i = 0; i < thread_repetitions; ++i) {
+		for (i = 0; i < *thread_repetitions; ++i) {
 			//printf("locking %d %d\n", *(int *) arg, j);
 			//pthread_mutex_lock(&instructions[id][j].counter->lock); 
 			instructions[id][j].work_fn(&instructions[id][j].counter->counter);
 			//pthread_mutex_unlock(&instructions[id][j].counter->lock);
+			//printf("b) id is %d\n", *(int *)arg);
 		}
 	
 		pthread_mutex_unlock(&instructions[id][j].counter->lock);
 
 
 	}
-	printf("b) id is %d\n", *(int *)arg);
+
 	//pthread_exit(NULL);
 	return NULL;
 }
@@ -197,7 +230,7 @@ main(void) {
 	int i, j, b, checkt;
 	/* declare number of arguments and threads */
 	//int *taskid[nthreads];							//args for each thread
-	pthread_t counter_thread[nthreads];
+	//pthread_t counter_thread[nthreads];
 	
 	/* read in number of counters */
 	if (get_numbers()) {
@@ -210,7 +243,7 @@ main(void) {
 			}
 			/*allocate memory for task id */
 			taskid = (int *)malloc(nthreads * sizeof(int));		
-			
+			counter_thread = calloc(nthreads, sizeof(pthread_t));
 			/* create the threads executing working_thread */
 			for (i = 0; i < nthreads; ++i) {
 				/* old method to allocate memory for the taskid */
@@ -224,10 +257,11 @@ main(void) {
 				/* error checking */
 				if (checkt){
 					printf("error creating thread %d\n", i);
-					exit(1);
+					exit(0);
 				}
 			}
 			/* join all threads */
+			
 			for (j = 0; j < nthreads; ++j) {
 				checkt = pthread_join(counter_thread[j], NULL);
 				if (checkt) {
@@ -240,26 +274,18 @@ main(void) {
 			//pthread_join(counter_thread[2], NULL);
 			//pthread_join(counter_thread[3], NULL);
 		}
-		else {
-			printf("error\n");		// error for get_instructions
-			exit(0);
-		}
+		else
+			error(); // error for get_instructions
 	}
-	else  {
-		printf("error\n");			// error in get_numbers function
-		exit(0);
-	}
+	else
+		error(); // error in get_numbers function
+
 	/* display counter states */	
-	print_out_counters();				
+	print_out_counters();	
+
 	/* free memory from global and local allocations */
 	if (!free_memory()) {
 		printf("problem freeing memory\n");
-	}
-	/*
-	for (k = 0; k < nthreads-1; ++k) {
-		free(taskid[k]);			// free thread arguments ints
-	}
-	*/
-	
+	}	
 	return 0;
 }
