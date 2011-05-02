@@ -9,7 +9,7 @@
 /* counter data structure */ 
 struct counter {
    long long counter;            /* to store counter */
-   pthread_mutex_t lock; 
+   pthread_mutex_t lock;		/* lock for each counter */ 
 };
 
 /* counter value */
