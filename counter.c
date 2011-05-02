@@ -10,6 +10,8 @@ static int nthreads = 0;
 static int *ninstructions = NULL;
 static struct instruction **instructions = NULL;
 
+static int *taskid = NULL;
+
 pthread_mutex_t flock; // DELETE LATER
 /* ============================================================================
  * Operations
@@ -144,7 +146,7 @@ int free_memory(void) {
 	/* free the counter array */
 	free(counters);
 
-
+	free(taskid);
 
 	return 1;
 }
@@ -157,34 +159,32 @@ static void *
 worker_thread(void *arg) {
 	
 	//struct instruction *thread_data;
-	int i = 0, 
-		j = 0;
+	long i = 0, 
+		 j = 0;
 	long id =  *(int *) arg;
 	int * thread_ninstructions = &ninstructions[id];
-
-
-	printf("going into for loop with j and thread_ninstruc: %d %d\n", j, *thread_ninstructions);	
+	printf("a) id is %d\n", *(int *)arg);
+	//printf("going into for loop with j and thread_ninstruc: %d %d\n", j, *thread_ninstructions);	
+	
 	/* work through all instructions for that thread */
 	for (j = 0; j < *thread_ninstructions; ++j) {
-		printf(" j < thread_ninstructions: %d < %d\n", j, *thread_ninstructions);
-		pthread_mutex_lock(&instructions[id][j].counter->lock); 
-		
 
+		pthread_mutex_lock(&instructions[id][j].counter->lock); 
 		int thread_repetitions = instructions[id][j].repetitions;
-		
-			/* for each repetition call the function */
+		/* for each repetition call the function */
 		for (i = 0; i < thread_repetitions; ++i) {
-			printf("locking %d %d\n", *(int *) arg, j);
+			//printf("locking %d %d\n", *(int *) arg, j);
 			//pthread_mutex_lock(&instructions[id][j].counter->lock); 
-			//pthread_mutex_lock(&flock);
 			instructions[id][j].work_fn(&instructions[id][j].counter->counter);
 			//pthread_mutex_unlock(&instructions[id][j].counter->lock);
 		}
-		
+	
 		pthread_mutex_unlock(&instructions[id][j].counter->lock);
-	//pthread_mutex_unlock(&flock);
-	}
 
+
+	}
+	printf("b) id is %d\n", *(int *)arg);
+	//pthread_exit(NULL);
 	return NULL;
 }
 
@@ -194,9 +194,9 @@ worker_thread(void *arg) {
  * ========================================================================== */
 int
 main(void) {
-	int i, j, b, k, checkt;
+	int i, j, b, checkt;
 	/* declare number of arguments and threads */
-	int *taskid[nthreads];							//args for each thread
+	//int *taskid[nthreads];							//args for each thread
 	pthread_t counter_thread[nthreads];
 	
 	/* read in number of counters */
@@ -208,22 +208,25 @@ main(void) {
 			for (b = 0; b < ncounters; ++b) {
 				pthread_mutex_init(&counters[b].lock, NULL); //TEMP
 			}
-
+			/*allocate memory for task id */
+			taskid = (int *)malloc(nthreads * sizeof(int));		
+			
 			/* create the threads executing working_thread */
 			for (i = 0; i < nthreads; ++i) {
-				/* allocate memory for the taskid */
-				taskid[i] = (int *)malloc(sizeof(int));										// create space for each arg
-				*taskid[i] = i;																// assign the incrementer as the arg
-				printf("calling create with arg %d\n", i);
-				//pthread_create(&counter_thread[i], NULL, worker_thread, (void *) taskid[i]);
-				checkt = pthread_create(&counter_thread[i], NULL, worker_thread, (void *) taskid[i]);
+				/* old method to allocate memory for the taskid */
+				//taskid[i] = (int *)malloc(sizeof(int));										// create space for each arg
+				//*taskid[i] = i;
+				
+				taskid[i] = i;																// assign the incrementer as the arg
+				//printf("calling create with arg %d\n", i);
+				checkt = pthread_create(&counter_thread[i], NULL, worker_thread, (void *) &taskid[i]);
+				
 				/* error checking */
 				if (checkt){
 					printf("error creating thread %d\n", i);
 					exit(1);
 				}
 			}
-			
 			/* join all threads */
 			for (j = 0; j < nthreads; ++j) {
 				checkt = pthread_join(counter_thread[j], NULL);
@@ -231,7 +234,11 @@ main(void) {
 					printf("error return code from thread %d\n", checkt);
 				}
 			}
-
+			
+			//pthread_join(counter_thread[0], NULL);
+			//pthread_join(counter_thread[1], NULL);
+			//pthread_join(counter_thread[2], NULL);
+			//pthread_join(counter_thread[3], NULL);
 		}
 		else {
 			printf("error\n");		// error for get_instructions
@@ -247,10 +254,12 @@ main(void) {
 	/* free memory from global and local allocations */
 	if (!free_memory()) {
 		printf("problem freeing memory\n");
-	}	
-	for (k = 0; k < nthreads; ++k) {
+	}
+	/*
+	for (k = 0; k < nthreads-1; ++k) {
 		free(taskid[k]);			// free thread arguments ints
 	}
-
+	*/
+	
 	return 0;
 }
