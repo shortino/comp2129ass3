@@ -158,6 +158,7 @@ int get_instructions(void){
 			else
 				return 0;
 		}
+		
 
 	}
 	return 1;
@@ -221,11 +222,15 @@ worker_thread(void *arg) {
 int
 main(void) {
 	int i, j, checkt;
+	int scan, temp;
 	/* read in number of counters */
 	if (get_numbers()) {
 		set_counters();				// allocate the array of counters
 		if (get_instructions()) {
-			
+			scan = scanf("%i", &temp);  // check for valid number	
+			if (scan != EOF) {
+				error();
+			}
 			/*allocate memory for taskid and threads*/
 			taskid = (int *)malloc(nthreads * sizeof(int));		
 			counter_thread = calloc(nthreads, sizeof(pthread_t));
