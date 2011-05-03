@@ -39,6 +39,13 @@ mult2(long long *n) {
 /* free all allocated memory, called from either error() or main() */
 int free_memory(void) {
 	int i;
+	/* free the muticies */
+	for (i = 0; i < ncounters; ++i) {
+		if (counters != NULL){
+			pthread_mutex_destroy(&counters[i].lock);
+		}
+	}
+	
 	/* free the 2d array elements then the actual array */
 	for (i = 0; i < nthreads; ++i) {
 		free(instructions[i]);
@@ -72,7 +79,7 @@ void error(void) {
 	/* free memory from global allocations */
 	if (!free_memory()) {
 		printf("problem freeing memory\n");
-	}	
+	}
 	// exit program
 	exit(0);
 }
@@ -80,8 +87,8 @@ void error(void) {
 /* gets the ncounters and nthreads first */
 int get_numbers(void){
 	int scan;
-	if ((scan = scanf("%i", &ncounters)) && ncounters > 0) {
-		if ((scan = scanf("%i", &nthreads)) && nthreads > 0) {
+	if ((scan = scanf("%i", &ncounters)) && (ncounters > 0)) {
+		if ((scan = scanf("%i", &nthreads)) && (nthreads > 0)) {
 			return 1;	// returns true if scan gets correct input
 		}
 	}
@@ -119,15 +126,20 @@ void (*get_function(const char f_id))(long long *){
 /* gets individual instruction sequence lines and sets the values, called by get_instructions*/
 int get_instruction_sequence(int threadid, int instructionid) {
 	int scan, i = threadid, j = instructionid;
-	int tempCounterid, tempIncrement;
+	long long int tempCounterid, tempIncrement;
 	char functionid;
-	if ((scan = scanf("%i %c %i", &tempCounterid, &functionid, &tempIncrement))) {
+	scan = 0;
+	if ((scan = scanf("%lli %c %lli", &tempCounterid, &functionid, &tempIncrement)) == 3) {
+		//printf("%lli %c %lli\n", tempCounterid, functionid, tempIncrement);	
+		/* set the instructions values for each squence checking for input errors */
+		if ((tempCounterid >= ncounters) || (tempCounterid < 0)) {
+			return 0;
+		}
+		instructions[i][j].counter = &counters[tempCounterid];		// set the counter to equal the ptr to the counter in the counter array
 		/* check repetitions is non-negative */
 		if(tempIncrement <= 0) {
 			return 0;
 		}
-		/* set the instructions values for each squence */
-		instructions[i][j].counter = &counters[tempCounterid];		// set the counter to equal the ptr to the counter in the counter array
 		instructions[i][j].repetitions = tempIncrement;
 		instructions[i][j].work_fn = get_function(functionid); 
 		return 1;
@@ -142,14 +154,14 @@ int get_instructions(void){
 	/* alocate an array to hold instruction sequence lengths for each thread*/
 	ninstructions = (int *) malloc(nthreads * sizeof(int));
 	/* alocate an array of pointers length nthreads first*/
-	instructions = malloc(nthreads * sizeof(struct instruction *));
+	instructions = calloc(nthreads, sizeof(struct instruction *));
 	/* for each pointer allocate dynamic array of instructions*/
 	for (i = 0; i < nthreads; ++i) {
 		/* get number of instructions */
 		scan = scanf("%i", &temp);  // check for valid number
 		ninstructions[i] = temp;
 		/* set the variable row 'length'/columns of the 2D array */
-		instructions[i] = malloc(ninstructions[i] * sizeof(struct instruction));
+		instructions[i] = calloc(ninstructions[i], sizeof(struct instruction));
 		/* grab the instruction sequence by calling the grab method */
 		for (j = 0; j < temp; ++j) {
 			if (get_instruction_sequence(i, j)) {
@@ -179,10 +191,10 @@ int get_instructions(void){
 }*/
 
 void print_out_counters(void) {
-	int i;
+	long long int i;
 	//struct counter*j;
 	for (i = 0; i < ncounters; ++i) {
-		printf("%d\n", (int)counters[i].counter);
+		printf("%lli\n", (long long int)counters[i].counter);
 	}
 }
 
@@ -256,8 +268,9 @@ main(void) {
 		else
 			error(); // error for get_instructions
 	}
-	else
+	else {
 		error(); // error in get_numbers function
+	}
 
 	/* display counter states */	
 	print_out_counters();	
